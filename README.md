@@ -19,7 +19,4 @@ Y | Toggles Day & Night Changer
 Ctrl | Toggles Recorded Times
 
 
-
-
-
 Thanks for using my Casting Mod :)
