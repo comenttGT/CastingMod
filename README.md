@@ -3,6 +3,8 @@ This is my First ever Casting Mod, so there will probably be some Issues/Bugs wi
 It is Open source so you can create your own Casting Mod, but with credits ofc ;)
 If you want to modify/create from the mod, make sure to read the LICENSE!!
 
+Also I know the Code is a bit messy, I wasn't planning on releasing it
+
 JOIN THE DISCORD: https://discord.gg/8ArfUrTrFG
 
 # Controls:
