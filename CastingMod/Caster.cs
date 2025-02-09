@@ -103,7 +103,7 @@ namespace CastingMod
             vc.LookAt = GameObject.Find("Player Objects/Player VR Controller/GorillaPlayer/TurnParent").transform;
             if (!PlayerPrefs.HasKey("IsFirstTimeLaunchingCasterMod"))
             {
-                //PlayerPrefs.SetInt("IsFirstTimeLaunchingCasterMod", 69);
+                PlayerPrefs.SetInt("IsFirstTimeLaunchingCasterMod", 69);
                 FirstLaunchWithCaster = true;
                 showCodeJoin = false;
             }
