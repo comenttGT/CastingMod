@@ -5,7 +5,7 @@ If you want to modify/create from the mod, make sure to read the LICENSE!!
 
 Controls:
 
-0-9 | Changes to the associated Player.
+0-9 | Changes to the associated Player.\n
 Enter | Changes to First/Third Person View
 Up Arrow | Make FOV Higher
 Down Arrow | Make FOV Lower
