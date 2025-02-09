@@ -7,6 +7,13 @@ Also I know the Code is a bit messy, I wasn't planning on releasing it
 
 JOIN THE DISCORD: https://discord.gg/8ArfUrTrFG
 
+#Features
+-Fov Changer
+-Nametags
+-Day & Night Manager
+-Built-in Timer
+-Spectater
+
 # Controls:
 
 0-9 | Changes to the associated Player.
