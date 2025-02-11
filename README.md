@@ -7,7 +7,7 @@ Also I know the Code is a bit messy, I wasn't planning on releasing it
 
 JOIN THE DISCORD: https://discord.gg/8ArfUrTrFG
 
-#Features
+# Features
 -Fov Changer
 -Nametags
 -Day & Night Manager
