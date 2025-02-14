@@ -1,4 +1,4 @@
-﻿using Photon.Realtime;
+using Photon.Realtime;
 using Structures;
 using System;
 using System.Collections.Generic;
@@ -23,9 +23,16 @@ namespace CastingMod
 
         private GameObject cameraFollower;
         private GameObject ThirdPersonObject;
+        private Camera miniMapCam;
         private MainCam cam;
 
         private List<string> recordedTimes = new List<string>();
+        private int team1Wins;
+        private int team2Wins;
+        private float latestTimeTeam1;
+        private float latestTimeTeam2;
+        private string team1Name = "Team1";
+        private string team2Name = "Team2";
         private int currentPlayedTeam = 0;
 
         private string currentRoom = "Not Connected";
@@ -34,17 +41,17 @@ namespace CastingMod
         public SpectatedPlayer currentSpectatedPlayer { get; internal set; }
 
         public event Action<NetPlayer> OnSwitchedSpectatedPlayer;
-        public event Action<NetPlayer> OnPlayerTagged;
 
         private bool isSpectating;
         public bool showNameTags { get; internal set; }
         private bool showRecordedTimes = true;
         private bool showCodeJoin = true;
         private bool showDayNightChanger = false;
+        private bool showControls = false;
+        private bool showTeamSetting = false;
 
 
         private NetPlayer[] allPlayers;
-        private NetPlayer[] taggedPlayers;
         private VRRig[] taggedRigs;
         public GorillaTagManager GTM;
         private BetterDayNightManager BDNM;
@@ -53,15 +60,13 @@ namespace CastingMod
         public MainCam FirstPersonCam { get; internal set; }
         private float FirstPerson_FOV = 120f;
 
-        private Vector2 posm = new Vector2(1725, 512), sizem = new Vector2(128, 32);
-
         private bool FirstLaunchWithCaster = false;
-
 
         private Dictionary<GameObject, NetPlayer> nameTagPlayerObjects = new Dictionary<GameObject, NetPlayer>();
         private Texture2D RunnerTextureButton;
         public Texture2D TaggerTextureButton { get; internal set; }
         private Texture2D DefaultTextureButon;
+        private RenderTexture MiniMap;
 
 
 
@@ -93,6 +98,20 @@ namespace CastingMod
             fpc.AddComponent<UniversalAdditionalCameraData>();
             CinemachineVirtualCamera vc = fpc.AddComponent<CinemachineVirtualCamera>();
             CinemachineVirtualCameraBase vcb = fpc.AddComponent<CinemachineVirtualCameraBase>();
+            MiniMap = new RenderTexture(512, 512, 24)
+            {
+                filterMode = FilterMode.Point
+            };
+            GameObject mm = new GameObject
+            {
+                name = "MiniMapCam"
+            };
+            miniMapCam = mm.AddComponent<Camera>();
+            mm.AddComponent<UniversalAdditionalCameraData>();
+            mm.transform.eulerAngles = new Vector3(90, 0, 0);
+            miniMapCam.targetTexture = MiniMap;
+            miniMapCam.cameraType = CameraType.Preview;
+            miniMapCam.forceIntoRenderTexture = true;
             FirstPersonCam = new MainCam
             {
                 Camera = firstPersonTemp,
@@ -109,12 +128,12 @@ namespace CastingMod
             }
             showNameTags = true;
             DefaultTextureButon = LoadTexture("defaultButton.png", new Vector2Int(128, 32));
-            RunnerTextureButton = LoadTexture("spectatedButton_runner.png", new Vector2Int(((int)sizem.x), ((int)sizem.y)));
-            TaggerTextureButton = LoadTexture("spectatedButton_taggers.png", new Vector2Int(((int)sizem.x), ((int)sizem.y)));
+            RunnerTextureButton = LoadTexture("spectatedButton_runner.png", new Vector2Int(128, 32));
+            TaggerTextureButton = LoadTexture("spectatedButton_taggers.png", new Vector2Int(128, 32));
+            MiniMap.dimension = UnityEngine.Rendering.TextureDimension.Tex2D;
             PhotonNetworkController.Instance.disableAFKKick = true;
             BDNM = FindAnyObjectByType<BetterDayNightManager>();
             OnSwitchedSpectatedPlayer += OnSwitchedSpectatedPlayerCallback;
-            //OnPlayerTagged += OnPlayerGotTagged;
             Callbacks.instance.OnLocalLeftRoom += OnLeftRoom;
             Callbacks.instance.OnLocalJoinedRoom += OnJoinedRoom;
             Callbacks.instance.OnPlayerJoined += OnPlayerJoined;
@@ -122,45 +141,11 @@ namespace CastingMod
         }
 
 
-
-
-
-
-        private async void CheckIfSomeoneGotTagged()
-        {
-            await Task.Delay(500);
-            await CheckIfSomeoneGotTagged_Once();
-        }
-
-        private Task CheckIfSomeoneGotTagged_Once()
-        {
-            if (PhotonNetwork.InRoom)
-            {
-                NetPlayer[] newtagged = GetTaggedPlayers();
-                taggedRigs = GetTaggedRigs();
-                if (newtagged.Length > taggedPlayers.Length)
-                {
-                    List<NetPlayer> oldTaggedPlayers = taggedPlayers.ToList();
-                    for (int i = 0; i < newtagged.Length; i++)
-                    {
-                        if (oldTaggedPlayers.Contains(newtagged[i]))
-                            continue;
-                        else
-                            OnPlayerTagged(newtagged[i]);
-                    }
-                    taggedPlayers = newtagged;
-                }
-                return Task.CompletedTask;
-            }
-            return null;
-        }
-        public NetPlayer[] GetTaggedPlayers()
-        {
-            return GTM.currentInfected.ToArray();
-        }
+        
+        public NetPlayer[] GetTaggedPlayers() => GTM.currentInfected.ToArray();
         public VRRig[] GetTaggedRigs()
         {
-            NetPlayer[] temptagged = GTM.currentInfected.ToArray();
+            NetPlayer[] temptagged = GetTaggedPlayers();
             List<VRRig> temprigs = new List<VRRig>();
             for (int i = 0; i < temptagged.Length; i++)
             {
@@ -206,6 +191,7 @@ namespace CastingMod
             catch(Exception e)
             {
                 print(e.Message);
+                GetTaggedRigs();
                 return -1f;
             }
         }
@@ -253,10 +239,8 @@ namespace CastingMod
         {
             FixUISpectateGlitch();
             currentRoom = PhotonNetwork.CurrentRoom.Name;
-            taggedPlayers = GetTaggedPlayers();
-            taggedRigs = GetTaggedRigs();
+            GetTaggedRigs();
             UpdateNameTags();
-            CheckIfSomeoneGotTagged();
             UpdatePlayerLists();
         }
 
@@ -299,7 +283,7 @@ namespace CastingMod
                         GUI.Label(new Rect
                         {
                             position = new Vector2(875, 960),
-                            size = sizem * 2
+                            size = new Vector2(256, 64)
                         }, $"<size=20><b>Distance from Lava: {((int)lavaDistance)}</b></size>");
                     }
 
@@ -351,8 +335,8 @@ namespace CastingMod
                 {
                     if (GUI.Button(new Rect
                     {
-                        position = posm + new Vector2(0, i * 40f),
-                        size = sizem
+                        position = new Vector2(1725, 512 + (i * 40f)),
+                        size = new Vector2(128, 32)
                     }, ""))
                     {
                         ChangeToPlayer(allPlayers[i]);
@@ -361,27 +345,27 @@ namespace CastingMod
                     {
                         GUI.DrawTexture(new Rect
                         {
-                            position = posm + new Vector2(0, i * 40f),
-                            size = sizem
+                            position = new Vector2(1725, 512 + (i * 40f)),
+                            size = new Vector2(128, 32)
                         }, TaggerTextureButton);
                     }
                     else
                     {
                         GUI.DrawTexture(new Rect
                         {
-                            position = posm + new Vector2(0, i * 40f),
-                            size = sizem
+                            position = new Vector2(1725, 512 + (i * 40f)),
+                            size = new Vector2(128, 32)
                         }, RunnerTextureButton, ScaleMode.StretchToFill, true, 0, GetPlayerColor(allPlayers[i]), 128, 0);
                     }
                     GUI.Label(new Rect
                     {
-                        position = posm + new Vector2(0, i * 40f),
-                        size = sizem
+                        position = new Vector2(1725, 512 + (i * 40f)),
+                        size = new Vector2(128, 32)
                     }, $"<size=15><b>{allPlayers[i].NickName}</b></size>");
                     GUI.Label(new Rect
                     {
-                        position = posm + new Vector2(135, i * 40f),
-                        size = sizem
+                        position = new Vector2(1860, 512 + (i * 40f)),
+                        size = new Vector2(128, 32)
                     }, $"<size=15><b>{i}</b></size>");
                 }
 
@@ -391,12 +375,12 @@ namespace CastingMod
             {
                 GUI.Label(new Rect
                 {
-                    position = new Vector2(1745, 10),
+                    position = new Vector2(1760, 280),
                     size = new Vector2(128, 32)
                 }, "<size=15><b><i>Change Time</i></b></size>");
                 if (GUI.Button(new Rect
                 {
-                    position = new Vector2(1745, 50),
+                    position = new Vector2(1745, 320),
                     size = new Vector2(128, 21)
                 }, ""))
                 {
@@ -404,18 +388,18 @@ namespace CastingMod
                 }
                 GUI.DrawTexture(new Rect
                 {
-                    position = new Vector2(1745, 50),
+                    position = new Vector2(1745, 320),
                     size = new Vector2(128, 21)
                 }, DefaultTextureButon);
                 GUI.Label(new Rect
                 {
-                    position = new Vector2(1745, 50),
+                    position = new Vector2(1745, 320),
                     size = new Vector2(128, 21)
                 }, "<size=10><b>Morning</b></size>");
                 ////////////////////////////////////
                 if (GUI.Button(new Rect
                 {
-                    position = new Vector2(1745, 80),
+                    position = new Vector2(1745, 350),
                     size = new Vector2(128, 21)
                 }, ""))
                 {
@@ -423,18 +407,18 @@ namespace CastingMod
                 }
                 GUI.DrawTexture(new Rect
                 {
-                    position = new Vector2(1745, 80),
+                    position = new Vector2(1745, 350),
                     size = new Vector2(128, 21)
                 }, DefaultTextureButon);
                 GUI.Label(new Rect
                 {
-                    position = new Vector2(1745, 80),
+                    position = new Vector2(1745, 350),
                     size = new Vector2(128, 21)
                 }, "<size=10><b>Day</b></size>");
                 ///////////////////////////////////
                 if (GUI.Button(new Rect
                 {
-                    position = new Vector2(1745, 110),
+                    position = new Vector2(1745, 380),
                     size = new Vector2(128, 21)
                 }, ""))
                 {
@@ -442,18 +426,18 @@ namespace CastingMod
                 }
                 GUI.DrawTexture(new Rect
                 {
-                    position = new Vector2(1745, 110),
+                    position = new Vector2(1745, 380),
                     size = new Vector2(128, 21)
                 }, DefaultTextureButon);
                 GUI.Label(new Rect
                 {
-                    position = new Vector2(1745, 110),
+                    position = new Vector2(1745, 380),
                     size = new Vector2(128, 21)
                 }, "<size=10><b>Afternoon</b></size>");
                 ////////////////////////////////////
                 if (GUI.Button(new Rect
                 {
-                    position = new Vector2(1745, 140),
+                    position = new Vector2(1745, 410),
                     size = new Vector2(128, 21)
                 }, ""))
                 {
@@ -461,18 +445,18 @@ namespace CastingMod
                 }
                 GUI.DrawTexture(new Rect
                 {
-                    position = new Vector2(1745, 140),
+                    position = new Vector2(1745, 410),
                     size = new Vector2(128, 21)
                 }, DefaultTextureButon);
                 GUI.Label(new Rect
                 {
-                    position = new Vector2(1745, 140),
+                    position = new Vector2(1745, 410),
                     size = new Vector2(128, 21)
                 }, "<size=10><b>Evening</b></size>");
                 ///////////////////////////////////////
                 if (GUI.Button(new Rect
                 {
-                    position = new Vector2(1745, 170),
+                    position = new Vector2(1745, 440),
                     size = new Vector2(128, 21)
                 }, ""))
                 {
@@ -480,12 +464,12 @@ namespace CastingMod
                 }
                 GUI.DrawTexture(new Rect
                 {
-                    position = new Vector2(1745, 170),
+                    position = new Vector2(1745, 440),
                     size = new Vector2(128, 21)
                 }, DefaultTextureButon);
                 GUI.Label(new Rect
                 {
-                    position = new Vector2(1745, 170),
+                    position = new Vector2(1745, 440),
                     size = new Vector2(128, 21)
                 }, "<size=10><b>Night</b></size>");
             }
@@ -514,6 +498,42 @@ namespace CastingMod
                     position = new Vector2(820, 580),
                     size = new Vector2(256, 21)
                 }, "                        <b><i>Join Code</i></b>");
+            }
+            if (showTeamSetting)
+            {
+                team1Name = GUI.TextField(new Rect
+                {
+                    position = new Vector2(720, 540),
+                    size = new Vector2(128, 24)
+                }, $"{team1Name}").ToUpper();
+                GUI.Label(new Rect
+                {
+                    position = new Vector2(630, 540),
+                    size = new Vector2(128, 24)
+                }, "<b><i>Team1 Name:</i></b>");
+                team2Name = GUI.TextField(new Rect
+                {
+                    position = new Vector2(1040, 540),
+                    size = new Vector2(128, 24)
+                }, $"{team2Name}").ToUpper();
+                GUI.Label(new Rect
+                {
+                    position = new Vector2(950, 540),
+                    size = new Vector2(128, 24)
+                }, "<b><i>Team2 Name:</i></b>");
+            }
+            GUI.DrawTexture(new Rect
+            {
+                position = new Vector2(1664, 0),
+                size = new Vector2(256, 256)
+            }, MiniMap);
+            if (showControls)
+            {
+                GUI.Label(new Rect
+                {
+                    position = new Vector2(1400, 0),
+                    size = new Vector2(512, 384)
+                }, "<b>0-9 | Changes to the associated Player\r\nEnter | Changes to First/Third Person View\r\nUp Arrow | Make FOV Higher\r\nDown Arrow | Make FOV Lower\r\nTab | Toggles Nametags\r\nEscape | Ends Spectating\r\nSpace | Starts/Stops the Timer\r\nAlt | Toggles the Room Joiner\r\nX | Save Time\r\nC | Pause/Unpause Time\r\nY | Toggles Day & Night Changer\r\nCtrl | Toggles Recorded Times\r\nF1 | Removes Point from Team1\r\nF2 | Removes Point from Team2\r\nF3 | Removes Last Recorded Time\r\nT | Shows Control\r\nCapsLk | Shows Team Name Changer</b>");
             }
             if (FirstLaunchWithCaster)
             {
@@ -545,6 +565,28 @@ namespace CastingMod
                 }, "                           <b><i>Close</i></b>");
             }
 
+            GUI.Label(new Rect
+            {
+                position = new Vector2(20, 940),
+                size = new Vector2(512, 256)
+            }, $"<color=cyan><size=20><b>{team1Name}: {team1Wins}</b></size></color>");
+            GUI.Label(new Rect
+            {
+                position = new Vector2(20, 980),
+                size = new Vector2(512, 256)
+            }, $"<color=red><size=20><b>{team2Name}: {team2Wins}</b></size></color>");
+            GUI.Label(new Rect
+            {
+                size = new Vector2(256, 21),
+                position = new Vector2(20, 1050),
+                width = 256,
+                height = 128
+            }, "<b>MADE BY COMENTTGT</b>");
+            GUI.Label(new Rect
+            {
+                position = new Vector2(1730, 260),
+                size = new Vector2(256, 24)
+            }, "<b>Press 'T' for Controls</b>");
         }
 
         public void EndSpectating()
@@ -576,34 +618,28 @@ namespace CastingMod
                 cameraFollower.transform.rotation = temp.headMesh.transform.rotation;
                 OnSwitchedSpectatedPlayer(player);
                 */
-                ThirdPersonObject.SetActive(false);
-                cameraFollower.transform.SetParent(temp.headMesh.transform);
-                cameraFollower.transform.position = temp.headMesh.transform.position;
-                cameraFollower.transform.rotation = temp.headMesh.transform.rotation;
-                FirstPersonCam.Object.SetActive(true);
                 FirstPersonCam.Camera.fieldOfView = FirstPerson_FOV;
                 FirstPersonCam.Camera.nearClipPlane = 0.001f;
                 FirstPersonCam.Camera.farClipPlane = 500f;
                 FirstPersonCam.Object.transform.SetParent(temp.mainSkin.transform);
                 FirstPersonCam.Object.transform.rotation = temp.mainSkin.transform.rotation;
                 FirstPersonCam.Object.transform.position = temp.mainSkin.transform.position - (temp.mainSkin.transform.forward * 2f) + ((-temp.mainSkin.transform.up) + (temp.mainSkin.transform.up * 1.2f));
-                OnSwitchedSpectatedPlayer(player);
             }
             else
             {
-                ThirdPersonObject.SetActive(false);
-                cameraFollower.transform.SetParent(temp.headMesh.transform);
-                cameraFollower.transform.position = temp.headMesh.transform.position;
-                cameraFollower.transform.rotation = temp.headMesh.transform.rotation;
-                FirstPersonCam.Object.SetActive(true);
                 FirstPersonCam.Camera.fieldOfView = FirstPerson_FOV + 7.5f;
                 FirstPersonCam.Camera.nearClipPlane = 0.025f;
                 FirstPersonCam.Camera.farClipPlane = 500f;
                 FirstPersonCam.Object.transform.SetParent(temp.headMesh.transform);
                 FirstPersonCam.Object.transform.rotation = temp.headMesh.transform.rotation;
                 FirstPersonCam.Object.transform.position = temp.headMesh.transform.position + (-temp.headMesh.transform.forward + (temp.headMesh.transform.forward * 1.1355f));
-                OnSwitchedSpectatedPlayer(player);
             }
+            ThirdPersonObject.SetActive(false);
+            cameraFollower.transform.SetParent(temp.headMesh.transform);
+            cameraFollower.transform.position = temp.headMesh.transform.position;
+            cameraFollower.transform.rotation = temp.headMesh.transform.rotation;
+            FirstPersonCam.Object.SetActive(true);
+            OnSwitchedSpectatedPlayer(player);
             UpdatePlayerLists();
         }
         private void OnSwitchedSpectatedPlayerCallback(NetPlayer player)
@@ -616,7 +652,7 @@ namespace CastingMod
                 Team = "pipi",
                 Transform = GTM.FindPlayerVRRig(player).headMesh.transform
             };
-            Debug.Log($"Changed Spectated Player to: {player.NickName}");
+            print($"Changed Spectated Player to: {player.NickName}");
         }
         private async void UpdateNameTags()
         {
@@ -696,18 +732,24 @@ namespace CastingMod
 
                 if (currentPlayedTeam == 0 || currentPlayedTeam == 2 || currentPlayedTeam == 4 || currentPlayedTeam == 6 || currentPlayedTeam == 8 || currentPlayedTeam == 10 || currentPlayedTeam == 12)
                 {
-                    recordedTimes.Add($"<color=cyan>Team1: {Timer.instance.ReturnedTime}</color>");
+                    recordedTimes.Add($"<color=cyan>{team1Name}: {Timer.instance.ReturnedTime}</color>");
+                    latestTimeTeam1 = Timer.instance.ActualTime;
+                    currentPlayedTeam++;
                 }
-                else if (currentPlayedTeam >= 13)
-                {
-                    Debug.Log("Can't save a new Recorded Time!");
-                }
+                else if (currentPlayedTeam > 13)
+                    print("Can't save a new Recorded Time!");
                 else
                 {
-                    recordedTimes.Add($"<color=red>Team2: {Timer.instance.ReturnedTime}</color>");
+                    recordedTimes.Add($"<color=red>{team2Name}: {Timer.instance.ReturnedTime}</color>");
+                    latestTimeTeam2 = Timer.instance.ActualTime;
+                    if (latestTimeTeam1 > latestTimeTeam2 && Math.Abs(latestTimeTeam1 - latestTimeTeam2) > 2000)
+                        team1Wins++;
+                    else if (latestTimeTeam1 < latestTimeTeam2 && Math.Abs(latestTimeTeam1 - latestTimeTeam2) > 2000)
+                        team2Wins++;
+                    currentPlayedTeam++;
+
                 }
                 Timer.instance.ImediateStopTime();
-                currentPlayedTeam++;
             }
             else if (Keyboard.current.cKey.wasPressedThisFrame)
                 Timer.instance.UnpauseOrPauseTime();
@@ -715,17 +757,34 @@ namespace CastingMod
                 showRecordedTimes = !showRecordedTimes;
             else if (Keyboard.current.yKey.wasPressedThisFrame)
                 showDayNightChanger = !showDayNightChanger;
-            else if (Cursor.lockState == CursorLockMode.Locked)
+            else if (Keyboard.current.f3Key.wasPressedThisFrame)
+                recordedTimes.RemoveAt(recordedTimes.Count - 1);
+            else if (Keyboard.current.f1Key.wasPressedThisFrame)
+                team1Wins--;
+            else if (Keyboard.current.f2Key.wasPressedThisFrame)
+                team2Wins--;
+            else if (Keyboard.current.tKey.wasPressedThisFrame)
+                showControls = !showControls;
+            else if(Keyboard.current.capsLockKey.wasPressedThisFrame)
+                showTeamSetting = !showTeamSetting;
+
+            if (isSpectating)
+            {
+                miniMapCam.transform.position = new Vector3(currentSpectatedPlayer.Transform.position.x, 30, currentSpectatedPlayer.Transform.position.z);
+                miniMapCam.fieldOfView = 70 - ((miniMapCam.transform.position.y - currentSpectatedPlayer.Transform.position.y) * 2.25f);
+            }
+            else
+            {
+                miniMapCam.transform.position = new Vector3(cam.Object.transform.position.x, 30, cam.Object.transform.position.z);
+                miniMapCam.fieldOfView = 70 - ((miniMapCam.transform.position.y - cam.Object.transform.position.y) * 2.25f);
+            }
+            if (Cursor.lockState == CursorLockMode.Locked)
             {
                 Cursor.visible = true;
                 Cursor.lockState = CursorLockMode.None;
             }
         }
-        private void UpdatePlayerLists()
-        {
-            allPlayers = NetworkSystem.Instance.AllNetPlayers;
-            CheckIfSomeoneGotTagged_Once();
-        }
+        private void UpdatePlayerLists() => allPlayers = NetworkSystem.Instance.AllNetPlayers;
         public VRRig[] AllRigs()
         {
             NetPlayer[] temptagged = NetworkSystem.Instance.AllNetPlayers;
@@ -739,7 +798,6 @@ namespace CastingMod
 
         private void OnPlayerJoined(Player player)
         {
-            taggedPlayers = GetTaggedPlayers();
             taggedRigs = GetTaggedRigs();
             FixUISpectateGlitch();
             DestroyPlayerNameTag(player);
@@ -752,7 +810,6 @@ namespace CastingMod
             if (currentSpectatedPlayer.Player.UserId == player.UserId)
                 EndSpectating();
 
-            taggedPlayers = GetTaggedPlayers();
             taggedRigs = GetTaggedRigs();
             DestroyPlayerNameTag(player);
             UpdateNameTags();
