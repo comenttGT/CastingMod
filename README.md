@@ -14,7 +14,7 @@ JOIN THE DISCORD: https://discord.gg/8ArfUrTrFG
 -Built-in Timer \
 -Mini-Map \
 -Automated Wins (with 2 second rule)\
--Team Wins
+-Team Wins \
 -Spectater 
 
 # Controls:
