@@ -1,6 +1,8 @@
-﻿using BepInEx;
+using BepInEx;
 using Utilities;
 using UnityEngine;
+using HarmonyLib;
+using System.Reflection;
 namespace CastingMod
 {
 
@@ -17,6 +19,8 @@ namespace CastingMod
 
         private void OnInit()
         {
+            Harmony h = new Harmony("ComenttsCastingMod");
+            h.PatchAll(Assembly.GetExecutingAssembly());
             GameObject parent = new GameObject
             {
                 name = "CastingMod"
