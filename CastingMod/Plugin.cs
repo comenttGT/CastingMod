@@ -11,7 +11,7 @@ namespace CastingMod
 
 
 
-    [BepInPlugin("Comentt", "Casting Mod", "1.0.0")]
+    [BepInPlugin("Comentt.CM", "Casting Mod", "1.0.0")]
     public class Plugin : BaseUnityPlugin
     {
 
